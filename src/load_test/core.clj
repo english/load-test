@@ -2,27 +2,29 @@
   (:require [clojure.core.async :as async]
             [org.httpkit.client :as http]))
 
-(defn enqueue-requests! [channel request rate]
+(defn- enqueue-requests! [channel request rate]
   (let [sleep-time (long (/ 1000 rate))]
     (async/go
       (while (async/>! channel request)
         (async/<! (async/timeout sleep-time))))))
 
-(defn enqueue-requests-for-duration-at-rate! [request-channel request duration rate]
+(defn- enqueue-requests-for-duration-at-rate! [request-channel request duration rate]
   (async/go
     (async/<! (async/timeout (* duration 1000)))
     (async/close! request-channel))
   (enqueue-requests! request-channel request rate))
 
-(defn send-requests! [request-channel response-channel]
+(defn- send-requests! [request-channel response-channel]
   (async/go-loop
     []
     (when-some [request (async/<! request-channel)]
       (let [start-time (System/currentTimeMillis)]
         (http/request request (fn [response]
                                 (async/put! response-channel
-                                            (assoc response :response-time (- (System/currentTimeMillis)
-                                                                              start-time))))))
+                                            (assoc response
+                                                   :time (System/currentTimeMillis)
+                                                   :response-time (- (System/currentTimeMillis)
+                                                                     start-time))))))
       (recur))))
 
 (defn blast!
